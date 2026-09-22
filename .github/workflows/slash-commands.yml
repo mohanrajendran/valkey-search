@@ -157,9 +157,14 @@ jobs:
                   const responseText = await res.text();
                   try {
                     const variable = JSON.parse(responseText);
+                    const isCountMap = value =>
+                      value !== null && typeof value === 'object' && !Array.isArray(value);
                     const parsedLedger = JSON.parse(variable.value);
-                    if (!parsedLedger || typeof parsedLedger !== 'object' || Array.isArray(parsedLedger)) {
-                      throw new TypeError('Ledger must be an object');
+                    if (!isCountMap(parsedLedger) ||
+                        ['firstPass', 'maintainers'].some(
+                          key => parsedLedger[key] !== undefined && !isCountMap(parsedLedger[key])
+                        )) {
+                      throw new TypeError('Ledger and pool maps must be objects');
                     }
                     ledger = parsedLedger;
                     ledgerExists = true;
