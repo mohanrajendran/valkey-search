@@ -386,11 +386,17 @@ jobs:
                   body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                 });
                 const data = await parseJsonResponse(res, 'Embedding');
-                if (!data || !Array.isArray(data.data)) {
+                const embeddings = data?.data?.map(item => item?.embedding);
+                if (!Array.isArray(embeddings) ||
+                    embeddings.length !== batch.length ||
+                    embeddings.some(embedding =>
+                      !Array.isArray(embedding) ||
+                      embedding.length === 0 ||
+                      embedding.some(value => !Number.isFinite(value)))) {
                   core.warning('Embedding API returned an unexpected response shape');
                   return null;
                 }
-                allEmbeddings.push(...data.data.map(d => d.embedding));
+                allEmbeddings.push(...embeddings);
               }
               return allEmbeddings;
             }
@@ -516,11 +522,11 @@ jobs:
             });
 
             const chatData = await parseJsonResponse(chatRes, 'Chat');
-            if (!chatData || !Array.isArray(chatData.choices) || !chatData.choices[0]?.message?.content) {
+            const content = chatData?.choices?.[0]?.message?.content;
+            if (!Array.isArray(chatData?.choices) || typeof content !== 'string' || content.trim().length === 0) {
               core.warning('Chat API returned an unexpected response shape');
               return;
             }
-            const content = chatData.choices[0].message.content.trim();
 
             let duplicates;
             try {
@@ -537,13 +543,13 @@ jobs:
             if (!Array.isArray(duplicates) || duplicates.length === 0) return;
 
             const candidateNumbers = new Set(candidates.map(c => c.issue.number));
-            const top = duplicates.filter(d => d.confidence >= 70 && candidateNumbers.has(d.number)).slice(0, 5);
+            const top = duplicates.filter(d => d && Number.isInteger(d.number) && Number.isFinite(d.confidence) && d.confidence >= 70 && candidateNumbers.has(d.number)).slice(0, 5);
             if (top.length === 0) return;
 
             // --- Step 7: Post comment ---
             let comment = '🔍 **Potential duplicates detected:**\n\n| # | Confidence | Reason |\n|---|------------|--------|\n';
             for (const d of top) {
-              const reason = (d.reason || '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+              const reason = String(d.reason || '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
               comment += '| #' + d.number + ' | ' + d.confidence + '% | ' + reason + ' |\n';
             }
             comment += '\n<sub>Detected via embedding similarity + GPT-4o-mini reasoning (GitHub Models). A maintainer should verify before closing as duplicate.</sub>';
@@ -653,7 +659,13 @@ jobs:
                     body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                   });
                   const data = await parseJsonResponse(res, 'Embedding');
-                  if (!data || !Array.isArray(data.data)) {
+                  const embeddings = data?.data?.map(item => item?.embedding);
+                  if (!Array.isArray(embeddings) ||
+                      embeddings.length !== batch.length ||
+                      embeddings.some(embedding =>
+                        !Array.isArray(embedding) ||
+                        embedding.length === 0 ||
+                        embedding.some(value => !Number.isFinite(value)))) {
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
@@ -662,7 +674,7 @@ jobs:
                     });
                     return null;
                   }
-                  allEmbeddings.push(...data.data.map(d => d.embedding));
+                  allEmbeddings.push(...embeddings);
                 }
                 return allEmbeddings;
               }
@@ -789,7 +801,8 @@ jobs:
               });
 
               const chatData = await parseJsonResponse(chatRes, 'Chat');
-              if (!chatData || !Array.isArray(chatData.choices) || !chatData.choices[0]?.message?.content) {
+              const content = chatData?.choices?.[0]?.message?.content;
+              if (!Array.isArray(chatData?.choices) || typeof content !== 'string' || content.trim().length === 0) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -798,7 +811,6 @@ jobs:
                 });
                 return;
               }
-              const content = chatData.choices[0].message.content.trim();
 
               let duplicates;
               try {
@@ -815,12 +827,12 @@ jobs:
               if (!Array.isArray(duplicates) || duplicates.length === 0) return;
 
               const candidateNumbers = new Set(candidates.map(c => c.issue.number));
-              const top = duplicates.filter(d => d.confidence >= 70 && candidateNumbers.has(d.number)).slice(0, 5);
+              const top = duplicates.filter(d => d && Number.isInteger(d.number) && Number.isFinite(d.confidence) && d.confidence >= 70 && candidateNumbers.has(d.number)).slice(0, 5);
               if (top.length === 0) return;
 
               let comment = '🔍 **Potential duplicates detected:**\n\n| # | Confidence | Reason |\n|---|------------|--------|\n';
               for (const d of top) {
-                const reason = (d.reason || '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+                const reason = String(d.reason || '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
                 comment += '| #' + d.number + ' | ' + d.confidence + '% | ' + reason + ' |\n';
               }
               comment += '\n<sub>Detected via embedding similarity + GPT-4o-mini reasoning (GitHub Models). A maintainer should verify before closing as duplicate.</sub>';
