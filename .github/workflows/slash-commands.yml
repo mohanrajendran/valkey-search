@@ -338,6 +338,23 @@ jobs:
             const SIMILARITY_THRESHOLD = 0.75;
             const TOP_K = 10;
 
+            async function parseJsonResponse(response, service) {
+              const contentType = response.headers.get('content-type') || 'unknown';
+              const text = await response.text();
+
+              if (!response.ok) {
+                core.warning(`${service} API error ${response.status} (${contentType})`);
+                return null;
+              }
+
+              try {
+                return JSON.parse(text);
+              } catch {
+                core.warning(`${service} API returned non-JSON data with HTTP ${response.status} (${contentType})`);
+                return null;
+              }
+            }
+
             // --- Helper: get embeddings in batches (64K token limit per call) ---
             async function getEmbeddings(texts) {
               const batchSize = 50;
@@ -352,11 +369,11 @@ jobs:
                   },
                   body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                 });
-                if (!res.ok) {
-                  core.warning('Embedding API error ' + res.status + ': ' + (await res.text()));
+                const data = await parseJsonResponse(res, 'Embedding');
+                if (!data || !Array.isArray(data.data)) {
+                  core.warning('Embedding API returned an unexpected response shape');
                   return null;
                 }
-                const data = await res.json();
                 allEmbeddings.push(...data.data.map(d => d.embedding));
               }
               return allEmbeddings;
@@ -482,13 +499,11 @@ jobs:
               }),
             });
 
-            if (!chatRes.ok) {
-              core.warning('Chat API error ' + chatRes.status + ': ' + (await chatRes.text()));
+            const chatData = await parseJsonResponse(chatRes, 'Chat');
+            if (!chatData || !Array.isArray(chatData.choices) || !chatData.choices[0]?.message?.content) {
+              core.warning('Chat API returned an unexpected response shape');
               return;
             }
-
-            const chatData = await chatRes.json();
-            if (!chatData.choices || !chatData.choices[0]) return;
             const content = chatData.choices[0].message.content.trim();
 
             let duplicates;
@@ -586,6 +601,23 @@ jobs:
               const SIMILARITY_THRESHOLD = 0.75;
               const TOP_K = 10;
 
+              async function parseJsonResponse(response, service) {
+                const contentType = response.headers.get('content-type') || 'unknown';
+                const text = await response.text();
+
+                if (!response.ok) {
+                  core.warning(`${service} API error ${response.status} (${contentType})`);
+                  return null;
+                }
+
+                try {
+                  return JSON.parse(text);
+                } catch {
+                  core.warning(`${service} API returned non-JSON data with HTTP ${response.status} (${contentType})`);
+                  return null;
+                }
+              }
+
               async function getEmbeddings(texts) {
                 const batchSize = 50;
                 const allEmbeddings = [];
@@ -599,16 +631,16 @@ jobs:
                     },
                     body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                   });
-                  if (!res.ok) {
+                  const data = await parseJsonResponse(res, 'Embedding');
+                  if (!data || !Array.isArray(data.data)) {
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: context.issue.number,
-                      body: '🔍 **Duplicate check failed:** Embedding API error (HTTP ' + res.status + ').',
+                      body: '🔍 **Duplicate check failed:** Embedding API returned an invalid or non-JSON response.',
                     });
                     return null;
                   }
-                  const data = await res.json();
                   allEmbeddings.push(...data.data.map(d => d.embedding));
                 }
                 return allEmbeddings;
@@ -735,18 +767,16 @@ jobs:
                 }),
               });
 
-              if (!chatRes.ok) {
+              const chatData = await parseJsonResponse(chatRes, 'Chat');
+              if (!chatData || !Array.isArray(chatData.choices) || !chatData.choices[0]?.message?.content) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  body: '🔍 **Duplicate check failed:** Chat API error (HTTP ' + chatRes.status + ').',
+                  body: '🔍 **Duplicate check failed:** Chat API returned an invalid or non-JSON response.',
                 });
                 return;
               }
-
-              const chatData = await chatRes.json();
-              if (!chatData.choices || !chatData.choices[0]) return;
               const content = chatData.choices[0].message.content.trim();
 
               let duplicates;
