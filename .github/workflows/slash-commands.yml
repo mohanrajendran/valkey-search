@@ -157,7 +157,11 @@ jobs:
                   const responseText = await res.text();
                   try {
                     const variable = JSON.parse(responseText);
-                    ledger = JSON.parse(variable.value);
+                    const parsedLedger = JSON.parse(variable.value);
+                    if (!parsedLedger || typeof parsedLedger !== 'object' || Array.isArray(parsedLedger)) {
+                      throw new TypeError('Ledger must be an object');
+                    }
+                    ledger = parsedLedger;
                     ledgerExists = true;
                   } catch (e) {
                     core.warning('Could not parse ' + LEDGER_VAR + ' response — falling back to rotation.');
@@ -360,14 +364,14 @@ jobs:
 
               if (!response.ok) {
                 core.warning(`${service} API error ${response.status} (${contentType})`);
-                return null;
+                return { data: null, errorKind: 'http' };
               }
 
               try {
-                return JSON.parse(text);
+                return { data: JSON.parse(text), errorKind: null };
               } catch {
                 core.warning(`${service} API returned non-JSON data with HTTP ${response.status} (${contentType})`);
-                return null;
+                return { data: null, errorKind: 'invalid-json' };
               }
             }
 
@@ -385,7 +389,8 @@ jobs:
                   },
                   body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                 });
-                const data = await parseJsonResponse(res, 'Embedding');
+                const parsed = await parseJsonResponse(res, 'Embedding');
+                const data = parsed.data;
                 const embeddings = data?.data?.map(item => item?.embedding);
                 if (!Array.isArray(embeddings) ||
                     embeddings.length !== batch.length ||
@@ -393,7 +398,13 @@ jobs:
                       !Array.isArray(embedding) ||
                       embedding.length === 0 ||
                       embedding.some(value => !Number.isFinite(value)))) {
-                  core.warning('Embedding API returned an unexpected response shape');
+                  let message = 'Embedding API returned an unexpected response shape.';
+                  if (parsed.errorKind === 'http') {
+                    message = 'Embedding API request failed (HTTP ' + res.status + ').';
+                  } else if (parsed.errorKind === 'invalid-json') {
+                    message = 'Embedding API returned an invalid or non-JSON response.';
+                  }
+                  core.warning(message);
                   return null;
                 }
                 allEmbeddings.push(...embeddings);
@@ -521,10 +532,17 @@ jobs:
               }),
             });
 
-            const chatData = await parseJsonResponse(chatRes, 'Chat');
+            const parsedChat = await parseJsonResponse(chatRes, 'Chat');
+            const chatData = parsedChat.data;
             const content = chatData?.choices?.[0]?.message?.content;
             if (!Array.isArray(chatData?.choices) || typeof content !== 'string' || content.trim().length === 0) {
-              core.warning('Chat API returned an unexpected response shape');
+              let message = 'Chat API returned an unexpected response shape.';
+              if (parsedChat.errorKind === 'http') {
+                message = 'Chat API request failed (HTTP ' + chatRes.status + ').';
+              } else if (parsedChat.errorKind === 'invalid-json') {
+                message = 'Chat API returned an invalid or non-JSON response.';
+              }
+              core.warning(message);
               return;
             }
 
@@ -634,14 +652,14 @@ jobs:
 
                 if (!response.ok) {
                   core.warning(`${service} API error ${response.status} (${contentType})`);
-                  return null;
+                  return { data: null, errorKind: 'http' };
                 }
 
                 try {
-                  return JSON.parse(text);
+                  return { data: JSON.parse(text), errorKind: null };
                 } catch {
                   core.warning(`${service} API returned non-JSON data with HTTP ${response.status} (${contentType})`);
-                  return null;
+                  return { data: null, errorKind: 'invalid-json' };
                 }
               }
 
@@ -658,7 +676,8 @@ jobs:
                     },
                     body: JSON.stringify({ model: EMBED_MODEL, input: batch }),
                   });
-                  const data = await parseJsonResponse(res, 'Embedding');
+                  const parsed = await parseJsonResponse(res, 'Embedding');
+                  const data = parsed.data;
                   const embeddings = data?.data?.map(item => item?.embedding);
                   if (!Array.isArray(embeddings) ||
                       embeddings.length !== batch.length ||
@@ -666,11 +685,17 @@ jobs:
                         !Array.isArray(embedding) ||
                         embedding.length === 0 ||
                         embedding.some(value => !Number.isFinite(value)))) {
+                    let message = 'Embedding API returned an unexpected response shape.';
+                    if (parsed.errorKind === 'http') {
+                      message = 'Embedding API request failed (HTTP ' + res.status + ').';
+                    } else if (parsed.errorKind === 'invalid-json') {
+                      message = 'Embedding API returned an invalid or non-JSON response.';
+                    }
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: context.issue.number,
-                      body: '🔍 **Duplicate check failed:** Embedding API returned an invalid or non-JSON response (HTTP ' + res.status + ').',
+                      body: '🔍 **Duplicate check failed:** ' + message,
                     });
                     return null;
                   }
@@ -800,14 +825,21 @@ jobs:
                 }),
               });
 
-              const chatData = await parseJsonResponse(chatRes, 'Chat');
+              const parsedChat = await parseJsonResponse(chatRes, 'Chat');
+              const chatData = parsedChat.data;
               const content = chatData?.choices?.[0]?.message?.content;
               if (!Array.isArray(chatData?.choices) || typeof content !== 'string' || content.trim().length === 0) {
+                let message = 'Chat API returned an unexpected response shape.';
+                if (parsedChat.errorKind === 'http') {
+                  message = 'Chat API request failed (HTTP ' + chatRes.status + ').';
+                } else if (parsedChat.errorKind === 'invalid-json') {
+                  message = 'Chat API returned an invalid or non-JSON response.';
+                }
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  body: '🔍 **Duplicate check failed:** Chat API returned an invalid or non-JSON response (HTTP ' + chatRes.status + ').',
+                  body: '🔍 **Duplicate check failed:** ' + message,
                 });
                 return;
               }
