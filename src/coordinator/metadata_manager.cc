@@ -393,8 +393,7 @@ void MetadataManager::HandleBroadcastedMetadata(
   }
 
   // Only accept metadata broadcasts if we are a primary
-  int flags = ValkeyModule_GetContextFlags(ctx);
-  if (flags & VALKEYMODULE_CTX_FLAGS_SLAVE) {
+  if (vmsdk::IsReplica(ctx)) {
     return;  // This is a replica, ignore the broadcast
   }
 
@@ -468,9 +467,8 @@ void MetadataManager::HandleBroadcastedMetadata(
           // The node may have been demoted after accepting the broadcast but
           // before the asynchronous metadata fetch completed. Recheck the
           // role on the main thread immediately before applying the update.
-          if (ValkeyModule_GetContextFlags(ctx) &
-              VALKEYMODULE_CTX_FLAGS_SLAVE) {
-            VMSDK_LOG_EVERY_N_SEC(DEBUG, ctx, 1)
+          if (vmsdk::IsReplica(ctx)) {
+            VMSDK_LOG_EVERY_N_SEC(NOTICE, ctx, 1)
                 << "Discarding metadata reconciliation because node is a "
                    "replica";
             return;
@@ -926,7 +924,7 @@ absl::Status MetadataManager::CreateEntryOnReplica(
     const coordinator::GlobalMetadataVersionHeader *global_version_header) {
   auto obj_name = ObjName::Decode(id);
 
-  if (ValkeyModule_GetContextFlags(ctx) & VALKEYMODULE_CTX_FLAGS_SLAVE) {
+  if (vmsdk::IsReplica(ctx)) {
     // On a live replica, apply the entry to the SchemaManager immediately.
     auto callback_result =
         TriggerCallbacks(type_name, obj_name, *metadata_entry);
