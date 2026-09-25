@@ -31,7 +31,7 @@ inline std::list<absl::string_view> ACLPermissionFormatter(
 }  // namespace
 
 vmsdk::module::Options options = {
-    .name = "search",
+    .name = kModuleName,
     .acl_categories = ACLPermissionFormatter({
         valkey_search::kSearchCategory,
     }),
@@ -108,6 +108,14 @@ vmsdk::module::Options options = {
                 .cmd_func =
                     &vmsdk::CreateCommand<valkey_search::FTAggregateCmd>,
             },
+            {
+                .cmd_name = valkey_search::kHybridCommand,
+                .permissions = ACLPermissionFormatter(
+                    valkey_search::kSearchCmdPermissions),
+                .flags = {vmsdk::module::kReadOnlyFlag,
+                          vmsdk::module::kDenyOOMFlag},
+                .cmd_func = &vmsdk::CreateCommand<valkey_search::FTHybridCmd>,
+            },
         },
     .on_load =
         [](ValkeyModuleCtx *ctx, ValkeyModuleString **argv, int argc,
@@ -126,4 +134,4 @@ vmsdk::module::Options options = {
           valkey_search::ValkeySearch::Instance().OnUnload(ctx);
         },
 };
-VALKEY_MODULE(options);
+VALKEY_MODULE(options, kModuleName, kModuleVersion);
