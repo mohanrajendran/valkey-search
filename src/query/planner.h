@@ -12,10 +12,13 @@
 
 namespace valkey_search::query {
 
+enum class HybridPolicy;
+
 // Returns whether to use pre-filtering as opposed to inline filtering based on
 // heuristics.
 bool UsePreFiltering(size_t estimated_num_of_keys,
-                     indexes::VectorBase *vector_index);
+                     indexes::VectorBase *vector_index,
+                     HybridPolicy hybrid_policy);
 }  // namespace valkey_search::query
 
 #endif  // VALKEYSEARCH_SRC_QUERY_PLANNER_H_

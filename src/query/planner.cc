@@ -12,6 +12,7 @@
 #include "absl/log/check.h"
 #include "src/indexes/index_base.h"
 #include "src/indexes/vector_base.h"
+#include "src/query/search.h"
 #include "src/valkey_search_options.h"
 
 namespace valkey_search::query {
@@ -19,7 +20,14 @@ namespace valkey_search::query {
 // The query planner decides whether to use pre or inline filtering based on
 // heuristics.
 bool UsePreFiltering(size_t estimated_num_of_keys,
-                     indexes::VectorBase *vector_index) {
+                     indexes::VectorBase *vector_index,
+                     HybridPolicy hybrid_policy) {
+  if (hybrid_policy == HybridPolicy::kAdHocBruteForce) {
+    return true;
+  }
+  if (hybrid_policy == HybridPolicy::kBatches) {
+    return false;
+  }
   if (vector_index->GetIndexerType() == indexes::IndexerType::kFlat) {
     /* With a flat index, the search needs to go through all the vectors,
     taking O(N*log(k)). With pre-filtering, we can do the same search on the

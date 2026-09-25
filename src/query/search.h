@@ -44,6 +44,13 @@ enum class SearchMode {
 };
 
 enum class SortOrder { kAscending, kDescending };
+
+enum class HybridPolicy {
+  kAuto,
+  kBatches,
+  kAdHocBruteForce,
+};
+
 struct SortByParameter {
   std::string field;
   SortOrder order{SortOrder::kAscending};
@@ -218,6 +225,7 @@ struct SearchParameters {
   bool enable_consistency{options::GetPreferConsistentResults().GetValue()};
   int k{0};
   std::optional<unsigned> ef;
+  HybridPolicy hybrid_policy{HybridPolicy::kAuto};
   LimitParameter limit;
   uint64_t timeout_ms{0};
   bool no_content{false};
@@ -241,6 +249,7 @@ struct SearchParameters {
     absl::string_view query_vector_string;
     absl::string_view k_string;
     absl::string_view ef_string;
+    absl::string_view hybrid_policy_string;
     //
     // A Map of param names to values. The target of the map is a pair
     // that is the string of the value AND a reference count so that we can
@@ -255,6 +264,7 @@ struct SearchParameters {
       query_vector_string = absl::string_view();
       k_string = absl::string_view();
       ef_string = absl::string_view();
+      hybrid_policy_string = absl::string_view();
       params.clear();
     }
   } parse_vars;
